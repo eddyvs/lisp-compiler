@@ -96,11 +96,21 @@ tokens.pop_front();
         result.push_back(s);
         return result;
     }
+    else if (allAlpha(s)){
+        result.push_back(s);
+        return result;
+    }
     else if (s == "("){
+        string expr = tokens[1];
+        result.push_back(expr);
         
+        while (s != ")"){
+            tokens.pop_front();
+            s = tokens[0];
+            result.push_back(s);
         }
-
-
+        return result;
+    }
 }
 
 
