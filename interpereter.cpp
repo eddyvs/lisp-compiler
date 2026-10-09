@@ -1,18 +1,24 @@
 #include <iostream>
 #include <deque>
 #include <stdexcept>
+#include <vector>
+#include <unordered_map>
 
 using namespace std;
 
 char EOF_CHR = '\0';
 char COMMENT_CHAR = '!';
 string snippet = R"(
+(block
+(set x 1)
+(while (< x 10)
+(block
+(set x (+ 1 x))
+(put x)
+)
+)
 
-(set x (+ 100 23023))
-(set y (- blah blah))
-
-
-
+)
 )";
 
 bool allDigits(string str){
@@ -22,7 +28,7 @@ bool allDigits(string str){
         }
     }
     return true;
-}
+};
 
 bool allAlpha(string str){
     for (char c : str){
@@ -31,7 +37,7 @@ bool allAlpha(string str){
         }
     }
     return true;
-}
+};
 
 deque<string> tokenize(string code){ 
     deque<char> rawCode;
@@ -47,7 +53,7 @@ deque<string> tokenize(string code){
     while (rawCode[0] != EOF_CHR){
         char c = rawCode.front();        
         rawCode.pop_front();
-        string expressions = "=+-*()";
+        string expressions = "<=+-*()";
         
         if (isspace(c) or c == ' ')
         {
@@ -84,45 +90,215 @@ deque<string> tokenize(string code){
 
     return tokens;
 
-}
+};
 
-deque<string> parse(deque<string> tokens){
-string s = tokens[0];
-deque<string> result;
 
-tokens.pop_front();
+enum class Types {Int, Var, Call};
 
-    if (allDigits(s)){
-        result.push_back(s);
-        return result;
+struct Node {
+    Types type;
+    int value;
+    string name;
+    vector<Node> args;
+};
+
+Node makeInt(int v){
+    Node n;
+    n.type = Types::Int;
+    n.value = v;
+    return n;
+};
+Node makeVar(string s){
+    Node n;
+    n.type = Types::Var;
+    n.name = s;
+    return n;
+};
+Node makeCall(string cmd, vector<Node> args){
+    Node n;
+    n.type = Types::Call;
+    n.name = cmd;
+    n.args = args;
+    return n;
+};
+Node parse(deque<string>& tokens){
+
+    string token = tokens.front();
+    tokens.pop_front();
+
+    if (allDigits(token)){
+        return makeInt(stoi(token));
     }
-    else if (allAlpha(s)){
-        result.push_back(s);
-        return result;
+    else if (allAlpha(token)){
+        return makeVar(token);
+
     }
-    else if (s == "("){
-        string expr = tokens[1];
-        result.push_back(expr);
-        
-        while (s != ")"){
-            tokens.pop_front();
-            s = tokens[0];
-            result.push_back(s);
+    else if (token == "(") {
+        string cmd = tokens.front();
+        tokens.pop_front();
+        vector<Node> args;
+        while (tokens.front() != ")"){
+           args.push_back(parse(tokens)); 
         }
-        return result;
+        tokens.pop_front();
+        return makeCall(cmd, args);
     }
+    else {
+        throw invalid_argument("EXCEPTION!");
+    }
+    
+};
+
+unordered_map<string, int> globalVars;
+
+int add(vector<Node> args);
+int multiply(vector<Node> args);
+int divide(vector<Node> args);
+int subtract(vector<Node> args);
+int lessThan(vector<Node> args);
+
+int evaluate(Node& parseTree){
+    
+    if (parseTree.type == Types::Int){
+        return parseTree.value;
+    }
+    else if (parseTree.type == Types::Var){
+
+        return globalVars.at(parseTree.name);
+
+    }
+    else if (parseTree.type == Types::Call){
+        string cmd = parseTree.name;
+        vector<Node> args = parseTree.args;
+
+        if (cmd == "set"){
+            string varName = args[0].name;
+            int varVal = evaluate(args[1]);
+            globalVars.insert_or_assign(varName, varVal);
+            return varVal;
+        }
+
+        else if (cmd == "block"){
+            for (Node arg : args){
+                evaluate(arg);
+            }
+            return -1;
+        }
+
+        else if (cmd == "put"){
+            cout << evaluate(args[0]);
+            return -1;
+        }
+
+        else if (cmd == "if"){
+            if (evaluate(args[0])==1){
+                return evaluate(args[2]);
+            }
+            else {
+                return evaluate(args[1]);
+            }
+        }
+
+        else if (cmd == "while"){
+
+            while (evaluate(args[0])==1){
+                evaluate(args[1]);
+            }
+
+            return -1;
+
+        }
+
+
+        else if (cmd == "+"){
+            return add(args);
+        }
+
+        else if (cmd == "-"){
+            return subtract(args);
+        }
+
+        else if (cmd == "*"){
+            return multiply(args);
+        }
+
+        else if (cmd == "/"){
+            return divide(args);
+        }
+
+        else if (cmd == "<"){
+            return lessThan(args);
+        }
+    }
+
+};
+
+
+int add(vector<Node> args){
+    int sum = 0;
+
+    for (Node arg : args){
+        sum += evaluate(arg);
+    }
+
+    return sum;
 }
 
+int subtract(vector<Node> args){
+    int result = 0;
+    for (int i = 0; i <args.size(); i++){
+        if (i == 0){
+            result += evaluate(args[i]);
+        }
+        else{
+            result -= evaluate(args[i]);
+        }
+    }
 
+    return result;
+}
 
+int multiply(vector<Node> args){
+    int result = 1;
+
+    for (Node arg : args){
+        result *= evaluate(arg);
+    }
+
+    return result;
+}
+
+int divide(vector<Node> args){
+    int result = 0;
+    for (int i = 0; i <args.size(); i++){
+        if (i == 0){
+            result += evaluate(args[i]);
+        }
+        else{
+            result /= evaluate(args[i]);
+        }
+    }
+
+    return result;
+}
+
+int lessThan(vector<Node> args){
+    
+    if (evaluate(args[0]) < evaluate(args[1])){
+        return 1;
+    }
+    else {
+        return 0;
+    }
+
+}
 
 int main() {
     deque<string> tokens = tokenize(snippet);
+    Node parsed = parse(tokens);
 
-    for (auto s : tokens){
-        cout << s;
-        cout << " ";
-    }
-}
+    evaluate(parsed);
+    
+};
 
 
